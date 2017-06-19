@@ -11,22 +11,21 @@
 #include <log/message_initializer.h>
 #include <log/macros.h>
 
-#include <boost/property_tree/json_parser.hpp>
-#include <boost/property_tree/ptree.hpp>
-#include <boost/foreach.hpp>
-#include <boost/utility.hpp>
-
 #include <curl/curl.h>
 
 #include <iostream>
 #include <fstream>
 #include <map>
+#include <string>
 #include <errno.h>
 
+#include "json.hpp"
 #include "plug_messages.h"
 
 using namespace isc::hooks;
 using namespace isc::dhcp;
+
+using json = nlohmann::json;
 
 struct ProvisionerData {
     bool deny;
@@ -122,32 +121,34 @@ int fetch_provisioner_data(ProvisionerData& pd, const std::string& hwaddr, bool 
         return -1;
     }
 
-    boost::property_tree::ptree pt_body;
-    boost::property_tree::json_parser::read_json(response_ss, pt_body);
+    json j;
+    response_ss >> j;
 
     pd.deny = false;
-    pd.ipv4 = pt_body.get<std::string>("ipv4", "");
-    pd.next_server = pt_body.get<std::string>("next-server", "");
 
-    auto& pt_opts = pt_body.get_child("options");
-    for (auto& child : pt_opts) {
-        uint8_t opt_code = child.second.get<uint8_t>("option");
-        std::string opt_value = child.second.get<std::string>("value");
+    if (j["ipv4"].is_string())
+        pd.ipv4 = j["ipv4"].get<std::string>();
 
-        pd.options[opt_code] = opt_value;
+    if (j["next-server"].is_string())
+        pd.next_server = j["next-server"].get<std::string>();
+
+    if (j["options"].is_array()) {
+        for (auto& item : j["options"]) {
+            uint8_t opt_code = item["option"].get<uint8_t>();
+            std::string opt_value = item["value"].get<std::string>();
+
+            pd.options[opt_code] = opt_value;
+        }
     }
 
     return 0;
 }
 
-int post_provisioner_data(const std::string& path, boost::property_tree::ptree &pt) {
+int post_provisioner_data(const std::string& path, const json& body_json) {
     std::stringstream response_ss;
-    std::ostringstream body_ss;
 
     std::string url = provisioner_url + path;
-
-    boost::property_tree::json_parser::write_json(body_ss, pt);
-    std::string body_s = body_ss.str();
+    std::string body_s = body_json.dump();
 
     LOG_INFO(plug_logger, PLUG_HOOK_NET_REQUEST)
         .arg(url);
@@ -222,60 +223,59 @@ int unload() {
 }
 
 int post_discovery4(Pkt4Ptr& query, HWAddrPtr& hwaddr) {
-    boost::property_tree::ptree pt;
-    boost::property_tree::ptree pt_opts;
+    json j;
+    json j_opts = json::array();
 
     isc::dhcp::OptionCollection& opts = query->options_;
     for (auto& p : opts) {
-        boost::property_tree::ptree pt_opt;
-
-        pt_opt.put("option", p.first);
-
         if (p.first == 12) {
             // String values
             std::stringstream ss;
             const isc::dhcp::OptionBuffer& opt_buf = p.second->getData();
             ss.write((const char *)&opt_buf[0], opt_buf.size());
-            ss.write("\0", 1);
-            pt_opt.put("value", ss.str());
-            pt_opts.push_back(std::make_pair("", pt_opt));
+            j_opts.push_back({ {"option", p.first}, {"value", ss.str()} });
         } else if (p.first == 93) {
-            // uint16 values
-            uint16_t value = p.second->getUint16();
-            pt_opt.put("value", value);
-            pt_opts.push_back(std::make_pair("", pt_opt));
+            try {
+                // uint16 values
+                uint16_t value = p.second->getUint16();
+                j_opts.push_back({ {"option", p.first}, {"value", value} });
+            } catch (const isc::OutOfRange& ex) { }
         }
     }
 
     // discover: true/false
     // mac
     // options: { option:, value: ""}
-    pt.put("discover", (query->getType() == DHCPDISCOVER));
-    pt.put("mac", hwaddr->toText(false));
-    pt.add_child("options", pt_opts);
+    j["discover"] = (query->getType() == DHCPDISCOVER);
+    j["mac"] = hwaddr->toText(false);
+    j["options"] = j_opts;
 
-    return post_provisioner_data("/ipv4/seen", pt);
+    return post_provisioner_data("/ipv4/seen", j);
 }
 
 int post_lease4(Pkt4Ptr& response, HWAddrPtr& hwaddr) {
-    boost::property_tree::ptree pt;
+    json j;
     uint32_t duration_secs = 0U;
 
-    const isc::asiolink::IOAddress& siaddr = response->getSiaddr();
+    const isc::asiolink::IOAddress& yiaddr = response->getYiaddr();
 
-    const auto& it = response->options_.find(51U);
+    // Option 59 is the Rebind timer T2
+    const auto& it = response->options_.find(59U);
     if (it != response->options_.end()) {
-        duration_secs = it->second->getUint32();
+        try {
+            duration_secs = it->second->getUint32();
+        } catch (const isc::OutOfRange& ex) {
+            duration_secs = 0U;
+        }
     }
 
-    pt.put("mac", hwaddr->toText(false));
-    pt.put("ipv4", siaddr.toText());
-    pt.put("duration", duration_secs);
+    j["mac"] = hwaddr->toText(false);
+    j["ipv4"] = yiaddr.toText();
+    j["duration"] = duration_secs;
     // mac
     // ipv4
-    // duration (opt 51)
 
-    return post_provisioner_data("/ipv4/lease", pt);
+    return post_provisioner_data("/ipv4/lease", j);
 }
 
 int pkt4_receive(CalloutHandle& handle) {
@@ -432,8 +432,12 @@ int pkt4_send(CalloutHandle& handle) {
 
             LOG_INFO(plug_logger, PLUG_HOOK_SET_OPTION)
                 .arg(hwaddr->toText(false))
-                .arg(p.first)
+                .arg(std::to_string(p.first))
                 .arg(p.second);
+        }
+
+        if (packet_type == DHCPACK) {
+            post_lease4(response, hwaddr);
         }
     } catch (const std::exception& ex) {
         LOG_ERROR(plug_logger, PLUG_HOOK_UNEXPECTED_ERROR)
