@@ -1,0 +1,7 @@
+% PLUG_HOOK_PARAMETER_ERR mr-provisioner hook: error using configuration parameter `%1`: %2
+% PLUG_HOOK_OVERRIDE_IP mr-provisioner hook: overriding lease IP for %1: %2
+% PLUG_HOOK_SET_OPTION mr-provisioner hook: setting option for %1: %2 => %3
+% PLUG_HOOK_NET_REQUEST mr-provisioner hook: backend request to URL: %1
+% PLUG_HOOK_NET_REQUEST_CURL_ERR mr-provisioner hook: backend http request failed with curl error: %1
+% PLUG_HOOK_NET_REQUEST_HTTP_ERR mr-provisioner hook: backend http request failed with status code %1
+% PLUG_HOOK_UNEXPECTED_ERROR mr-provisioner hook: an unexpected error occurred in %1: %2

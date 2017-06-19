@@ -1,0 +1,52 @@
+{
+"Dhcp4": {
+    "interfaces-config": {
+        "interfaces": [ "ens1f0.101" ],
+        "dhcp-socket-type": "raw"
+    },
+    "valid-lifetime": 3600,
+    "renew-timer": 1000,
+    "rebind-timer": 2000,
+    "subnet4": [{
+        "subnet": "10.101.0.0/16",
+        "pools": [
+            { "pool": "10.101.2.100-10.101.254.254" }
+        ]
+    }],
+    "next-server": "10.101.1.1",
+    "option-data": [
+        {
+           "name": "domain-name-servers",
+           "data": "8.8.8.8, 8.8.4.4"
+        },
+        {
+           "name": "routers",
+           "data": "10.101.0.254"
+        },
+        {
+           "name": "boot-file-name",
+           "data": "mlab-grubaa64.efi"
+        },
+        {
+           "name": "tftp-server-name",
+           "data": "10.101.1.1"
+        }
+    ],
+    "hooks-libraries": [
+        {
+            "library": "/usr/src/kea_plugin/mr_provisioner.so",
+            "parameters": {
+                "provisioner_url": "http://127.0.0.1:5000/dhcp",
+                "timeout_ms": 5000
+            }
+        }
+    ]
+},
+
+"Logging": {
+   "loggers": [{
+        "name": "*",
+        "severity": "DEBUG"
+    }]
+}
+}
