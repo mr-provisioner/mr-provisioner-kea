@@ -18,4 +18,5 @@ In the Kea source directory:
 
 Assuming Kea source is in `/usr/src/kea-1.2.0` and was installed into `/opt/kea`:
 
-    make KEA_SRC_LIB_DIR=/usr/src/kea-1.2.0/src/lib KEA_LIB_DIR=/opt/kea/lib KEA_MSG_COMPILER=/opt/kea/bin/kea-msg-compiler
+    make KEA_SRC=/usr/src/kea-1.2.0 KEA_PREFIX=/opt/kea
+    sudo make KEA_SRC=/usr/src/kea-1.2.0 KEA_PREFIX=/opt/kea install
