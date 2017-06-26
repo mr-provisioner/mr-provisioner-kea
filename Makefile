@@ -1,10 +1,16 @@
-KEA_SRC_LIB_DIR?=/usr/src/kea-1.2.0/src/lib
-KEA_LIB_DIR?=/usr/local/lib
-KEA_MSG_COMPILER?=/usr/local/bin/kea-msg-compiler
+KEA_SRC?=/usr/src/kea-1.2.0
+KEA_PREFIX?=/usr/local
 
-BOOST_INCS?= #-isystem /arm/tools/boost/boost/1.54.0/rhe6-x86_64/include
+KEA_LIB_DIR?=$(KEA_PREFIX)/lib
+KEA_MSG_COMPILER?=$(KEA_PREFIX)/bin/kea-msg-compiler
+KEA_SRC_LIB_DIR?=$(KEA_SRC)/src/lib
+INSTALL_DIR?=$(KEA_LIB_DIR)
+
+BOOST_INCS?=
 INCS= -I$(KEA_SRC_LIB_DIR) $(BOOST_INCS)
 CXX?=g++
+
+SONAME=libkea-hook-mr-provisioner.so
 
 WARNFLAGS=-Wall -W -Wno-unused-parameter -Wpointer-arith -Wreturn-type -Wwrite-strings -Wswitch -Wcast-align -Wchar-subscripts
 CXXFLAGS=-std=c++11
@@ -21,7 +27,7 @@ LDFLAGS_CURL=$(shell curl-config --libs)
 # -lkea-dhcpsrv -lkea-dhcp++ -lkea-hooks -lkea-log -lkea-util \
 #      -lkea-exceptions
 
-mr_provisioner.so: plug.os plug_messages.os
+$(SONAME): plug.os plug_messages.os
 	$(CXX) -shared $(CXXFLAGS) $(LIBADD) $^ -o $@ $(LDFLAGS_CURL)
 
 plug.os: plug.cc plug_messages.h
@@ -36,7 +42,12 @@ plug_messages.cc: plug_messages.mes
 plug_messages.h: plug_messages.cc
 	# created by dep
 
+.PHONY: clean
 clean:
 	rm -f plug_messages.h plug_messages.cc
 	rm -f plug_messages.os plug.os
-	rm -f mr_provisioner.so
+	rm -f $(SONAME)
+
+.PHONY: install
+install: $(SONAME)
+	install -m 0755 $(SONAME) $(INSTALL_DIR)
