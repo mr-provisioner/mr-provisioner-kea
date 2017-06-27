@@ -5,3 +5,5 @@
 % PLUG_HOOK_NET_REQUEST_CURL_ERR mr-provisioner hook: backend http request failed with curl error: %1
 % PLUG_HOOK_NET_REQUEST_HTTP_ERR mr-provisioner hook: backend http request failed with status code %1
 % PLUG_HOOK_UNEXPECTED_ERROR mr-provisioner hook: an unexpected error occurred in %1: %2
+% PLUG_HOOK_SUBNET_SEL mr-provisioner hook: selecting subnet %1 (%2/%3) for %4
+% PLUG_HOOK_SUBNET_DEF mr-provisioner hook: leaving default subnet for %1
