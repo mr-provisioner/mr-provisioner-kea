@@ -371,11 +371,11 @@ int subnet4_select(CalloutHandle& handle) {
     try {
         Pkt4Ptr query;
         handle.getArgument("query4", query);
-        uint8_t packet_type = query->getType();
         HWAddrPtr hwaddr = query->getMAC(HWAddr::HWADDR_SOURCE_ANY);
 
         Subnet4Ptr subnet;
         const Subnet4Collection *subnets;
+        handle.getArgument("subnet4", subnet);
         handle.getArgument("subnet4collection", subnets);
         if (subnets->empty()) {
             return 0;
