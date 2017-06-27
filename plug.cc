@@ -371,10 +371,8 @@ int subnet4_select(CalloutHandle& handle) {
     try {
         Pkt4Ptr query;
         handle.getArgument("query4", query);
-
-        // Get the user id saved from the query packet.
-        HWAddrPtr hwaddr;
-        handle.getContext(query_hwaddr_label, hwaddr);
+        uint8_t packet_type = query->getType();
+        HWAddrPtr hwaddr = query->getMAC(HWAddr::HWADDR_SOURCE_ANY);
 
         Subnet4Ptr subnet;
         const Subnet4Collection *subnets;
