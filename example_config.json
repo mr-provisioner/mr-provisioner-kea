@@ -7,12 +7,20 @@
     "valid-lifetime": 3600,
     "renew-timer": 1000,
     "rebind-timer": 2000,
-    "subnet4": [{
-        "subnet": "10.101.0.0/16",
-        "pools": [
-            { "pool": "10.101.2.100-10.101.254.254" }
-        ]
-    }],
+    "subnet4": [
+        {
+            "subnet": "10.101.0.0/20",
+            "pools": [
+                { "pool": "10.101.2.1-10.101.15.254" }
+            ]
+        },
+        {
+            "subnet": "10.101.16.0/20",
+            "pools": [
+                { "pool": "10.101.16.1-10.101.31.254" }
+            ]
+        }
+    ],
     "option-data": [
         {
            "name": "domain-name-servers",
