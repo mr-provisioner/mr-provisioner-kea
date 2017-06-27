@@ -378,7 +378,7 @@ int subnet4_select(CalloutHandle& handle) {
 
         Subnet4Ptr subnet;
         const Subnet4Collection *subnets;
-        handle.getArgument("subnet4Collection", subnets);
+        handle.getArgument("subnet4collection", subnets);
         if (subnets->empty()) {
             return 0;
         }
