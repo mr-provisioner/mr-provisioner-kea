@@ -183,11 +183,24 @@ int post_subnet4sel(Pkt4Ptr& query, const std::string& hwaddr, const Subnet4Coll
     json j_subnets = json::array();
 
     for (auto& s : subnets) {
+	json j_pools = json::array();
         const auto& params = s->get();
+
+        const auto& pools = s->getPools(Lease::Type::TYPE_V4);
+        for (auto& p : pools) {
+            j_pools.push_back({
+                { "poolId", p->getId() },
+                { "firstIP", p->getFirstAddress().toText() },
+                { "lastIP", p->getLastAddress().toText() },
+                { "capacity", p->getCapacity() }
+            });
+        }
+
         j_subnets.push_back({
             { "subnetId", s->getID() },
             { "prefix", params.first.toText() },
-            { "prefixLen", params.second }
+            { "prefixLen", params.second },
+            { "pools", j_pools }
         });
     }
 
