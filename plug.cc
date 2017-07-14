@@ -8,6 +8,7 @@
 #include <dhcp/pkt4.h>
 #include <dhcp/pkt6.h>
 #include <dhcpsrv/lease.h>
+#include <dhcpsrv/subnet.h>
 #include <log/message_initializer.h>
 #include <log/macros.h>
 
@@ -144,7 +145,7 @@ int fetch_provisioner_data(ProvisionerData& pd, const std::string& hwaddr, bool 
     return 0;
 }
 
-int post_provisioner_data(const std::string& path, const json& body_json) {
+int post_provisioner_data(const std::string& path, const json& body_json, json *j_out = NULL) {
     std::stringstream response_ss;
 
     std::string url = provisioner_url + path;
@@ -155,6 +156,10 @@ int post_provisioner_data(const std::string& path, const json& body_json) {
 
     if (do_req(true, response_ss, url.c_str(), body_s) != 0) {
         return -1;
+    }
+
+    if (j_out) {
+        response_ss >> *j_out;
     }
 
     return 0;
@@ -170,6 +175,78 @@ void add_option4(Pkt4Ptr& response, uint8_t opt_code, std::string& opt_value) {
     // Now add the option.
     opt.reset(new OptionString(Option::V4, opt_code, opt_value));
     response->addOption(opt);
+}
+
+int post_subnet4sel(Pkt4Ptr& query, const std::string& hwaddr, const Subnet4Collection& subnets, Subnet4Ptr& subnet) {
+    json j;
+    json j_resp;
+    json j_subnets = json::array();
+
+    for (auto& s : subnets) {
+	json j_pools = json::array();
+        const auto& params = s->get();
+
+        const auto& pools = s->getPools(Lease::Type::TYPE_V4);
+        for (auto& p : pools) {
+            j_pools.push_back({
+                { "poolId", p->getId() },
+                { "firstIP", p->getFirstAddress().toText() },
+                { "lastIP", p->getLastAddress().toText() },
+                { "capacity", p->getCapacity() }
+            });
+        }
+
+        j_subnets.push_back({
+            { "subnetId", s->getID() },
+            { "prefix", params.first.toText() },
+            { "prefixLen", params.second },
+            { "pools", j_pools }
+        });
+    }
+
+    j["mac"] = hwaddr;
+    j["subnets"] = j_subnets;
+
+    if ((post_provisioner_data("/ipv4/subnet", j, &j_resp)) != 0) {
+        return -1;
+    }
+
+    if (j_resp["subnetId"].is_null()) {
+        // If subnetId is null, use the default subnet instead of picking
+        // a new one.
+        LOG_INFO(plug_logger, PLUG_HOOK_SUBNET_DEF)
+            .arg(hwaddr);
+
+        return 0;
+    }
+
+    if (!j_resp["subnetId"].is_number()) {
+        LOG_ERROR(plug_logger, PLUG_HOOK_UNEXPECTED_ERROR)
+            .arg("post_subnet4sel")
+            .arg("subnetId is not a number");
+
+        return -1;
+    }
+
+    const SubnetID selectedId = j_resp["subnetId"].get<SubnetID>();
+
+    for (auto& s : subnets) {
+        if (s->getID() != selectedId)
+            continue;
+
+        const auto& params = s->get();
+
+        LOG_INFO(plug_logger, PLUG_HOOK_SUBNET_SEL)
+            .arg(s->getID())
+            .arg(params.first.toText())
+            .arg(params.second)
+            .arg(hwaddr);
+
+        subnet = s;
+        break;
+    }
+
+    return 0;
 }
 
 extern "C" {
@@ -295,6 +372,37 @@ int pkt4_receive(CalloutHandle& handle) {
     } catch (const std::exception& ex) {
         LOG_ERROR(plug_logger, PLUG_HOOK_UNEXPECTED_ERROR)
             .arg("pkt4_receive")
+            .arg(ex.what());
+
+        return 1;
+    }
+
+    return (0);
+}
+
+int subnet4_select(CalloutHandle& handle) {
+    try {
+        Pkt4Ptr query;
+        handle.getArgument("query4", query);
+        HWAddrPtr hwaddr = query->getMAC(HWAddr::HWADDR_SOURCE_ANY);
+
+        Subnet4Ptr subnet;
+        const Subnet4Collection *subnets;
+        handle.getArgument("subnet4", subnet);
+        handle.getArgument("subnet4collection", subnets);
+        if (subnets->empty()) {
+            return 0;
+        }
+
+        if (post_subnet4sel(query, hwaddr->toText(false), *subnets, subnet) != 0) {
+            return 0;
+        }
+
+        handle.setArgument("subnet4", subnet);
+
+    } catch (const std::exception& ex) {
+        LOG_ERROR(plug_logger, PLUG_HOOK_UNEXPECTED_ERROR)
+            .arg("subnet4_select")
             .arg(ex.what());
 
         return 1;
